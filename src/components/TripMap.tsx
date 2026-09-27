@@ -8,6 +8,12 @@ import { END_ID, START_ID, type LatLng, type Trip } from "@/lib/types";
 
 const toLL = (p: LatLng): [number, number] => [p.lat, p.lng];
 
+// CARTO raster basemaps show an "API key required" watermark without a key.
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+const TILE_URL =
+  "https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png" +
+  (CARTO_KEY ? `?key=${encodeURIComponent(CARTO_KEY)}` : "");
+
 const HOME_SVG =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>';
 
@@ -67,7 +73,7 @@ export default function TripMap({ trip, highlightLeg, selectedStop, onSelectStop
     <MapContainer center={[40.7359, -73.9911]} zoom={12} zoomControl={false} scrollWheelZoom style={{ width: "100%", height: "100%" }}>
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url={TILE_URL}
       />
       <ZoomBottomRight />
       <FitBounds points={points} />
