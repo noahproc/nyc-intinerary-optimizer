@@ -63,7 +63,8 @@ class FallbackBikes implements BikeProvider {
         return await this.primary.availability(a, b);
       } catch (e) {
         this.failed = true;
-        this.warn(`Citi Bike live feed unavailable (${(e as Error).message}); showing sample availability.`);
+        console.warn("Citi Bike GBFS failed:", e);
+        this.warn("Live Citi Bike availability is unreachable right now, so bike counts are sample data.");
       }
     }
     return this.fallback.availability(a, b);
