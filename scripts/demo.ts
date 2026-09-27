@@ -26,10 +26,10 @@ async function main() {
     if (!leg) return;
     const parts = leg.segments.filter((x) => x.durationMin > 0).map((x) => `${x.label ?? x.mode} ${x.durationMin}m`);
     console.log(`            ↓ ${leg.mode.toUpperCase()} ${leg.durationMin} min, $${leg.costUsd.toFixed(2)}  [${parts.join(" | ")}]`);
-    for (const sg of leg.suggestions) console.log(`              ✨ ${sg.place.name}: ${sg.reason}`);
+    for (const sg of leg.suggestions) console.log(`              + along the way: ${sg.place.name}: ${sg.reason}`);
   });
-  for (const u of trip.unscheduled) console.log(`\n⚠ Not scheduled: ${u.stop.place.name}: ${u.reason}`);
-  for (const w of trip.warnings) console.log(`⚠ ${w}`);
+  for (const u of trip.unscheduled) console.log(`\n! Not scheduled: ${u.stop.place.name}: ${u.reason}`);
+  for (const w of trip.warnings) console.log(`! ${w}`);
   console.log(`\nTotal $${trip.cost.totalUsd.toFixed(2)} for ${req.travelers ?? 1} travelers`);
   for (const l of trip.cost.lines) console.log(`  ${l.title}: $${l.totalUsd.toFixed(2)} (${l.legs.length} legs)`);
   console.log(`Travel ${trip.totals.travelMin} min · wait ${Math.round(trip.totals.waitMin)} min · slack ${Math.round(trip.totals.slackMin)} min`);

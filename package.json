@@ -1,5 +1,5 @@
 {
-  "name": "nyc-itinerary-optimizer",
+  "name": "nysee",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,11 +11,16 @@
     "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/fustat": "^5.3.0",
     "leaflet": "^1.9.4",
+    "lucide-react": "^1.48.0",
     "next": "^16.3.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-leaflet": "^5.0.0"
+    "react-leaflet": "^5.0.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/leaflet": "^1.9.22",
