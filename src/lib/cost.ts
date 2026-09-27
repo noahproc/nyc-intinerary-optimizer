@@ -1,7 +1,7 @@
 import { FARES, FARES_AS_OF } from "./fares";
 import { inCongestionZone } from "./geo";
 import { LINKS, uberLink } from "./deeplinks";
-import type { CostLine, CostSummary, Leg, PaymentChannel, ScheduledStop } from "./types";
+import type { CostLine, CostSummary, Leg, PaymentChannel, ScheduledStop, Trip } from "./types";
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
@@ -96,4 +96,55 @@ export function summarizeCost(legs: Leg[], schedule: ScheduledStop[], travelers:
   const order: PaymentChannel[] = ["omny", "tapp", "mta-rail", "citibike", "uber", "car"];
   const sorted = order.filter((p) => lines.has(p)).map((p) => lines.get(p)!);
   return { totalUsd: money(sorted.reduce((t, l) => t + l.totalUsd, 0)), lines: sorted, notes };
+}
+
+/**
+ * Merge per-day fare bundles into one for the whole trip. Leg labels get a
+ * "Day N" prefix, and OMNY's weekly cap is applied across days: after 12 paid
+ * rides in 7 days, each rider's remaining subway/bus rides that week are free.
+ */
+export function combineCosts(days: Trip[], travelers: number): CostSummary {
+  if (days.length === 1) return days[0].cost;
+  const lines = new Map<PaymentChannel, CostLine>();
+  const notes = new Set<string>();
+  const omnyDay: number[] = [];
+
+  days.forEach((trip, d) => {
+    for (const line of trip.cost.lines) {
+      const into = lines.get(line.payment) ?? { ...line, totalUsd: 0, legs: [], deepLinks: [] };
+      into.totalUsd = money(into.totalUsd + line.totalUsd);
+      for (const leg of line.legs) {
+        into.legs.push({ ...leg, label: `Day ${d + 1}: ${leg.label}` });
+        if (line.payment === "omny") omnyDay.push(d);
+      }
+      for (const link of line.deepLinks) if (!into.deepLinks.some((x) => x.url === link.url)) into.deepLinks.push(link);
+      lines.set(line.payment, into);
+    }
+    trip.cost.notes.forEach((n) => notes.add(n));
+  });
+
+  const omny = lines.get("omny");
+  let freed = 0;
+  if (omny) {
+    // Weeks counted from the first day of the trip.
+    const rides = new Map<number, number>();
+    omny.legs.forEach((leg, k) => {
+      const week = Math.floor(omnyDay[k] / 7);
+      const n = (rides.get(week) ?? 0) + 1;
+      rides.set(week, n);
+      if (n > FARES.omnyWeeklyCapRides && leg.costUsd > 0) {
+        freed = money(freed + leg.costUsd);
+        leg.costUsd = 0;
+        leg.label += " (free: fare cap)";
+      }
+    });
+    omny.totalUsd = money(omny.totalUsd - freed);
+  }
+
+  const order: PaymentChannel[] = ["omny", "tapp", "mta-rail", "citibike", "uber", "car"];
+  const sorted = order.filter((p) => lines.has(p)).map((p) => lines.get(p)!);
+  const capNote = freed
+    ? [`OMNY fare cap: rides after the ${FARES.omnyWeeklyCapRides}th in 7 days are free, saving about $${freed.toFixed(2)}${travelers > 1 ? " across your group" : ""}.`]
+    : [];
+  return { totalUsd: money(sorted.reduce((t, l) => t + l.totalUsd, 0)), lines: sorted, notes: [...capNote, ...notes] };
 }

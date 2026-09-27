@@ -32,7 +32,7 @@ import type { AiPlanResult } from "@/lib/ai/plan";
 import type { Beyond, GettingAround, Pace, Party, QuizAnswers } from "@/lib/ai/types";
 import { PLACES_BY_ID } from "@/lib/fixtures/places";
 import { formatDuration, hm, parseClock, toClockInput } from "@/lib/time";
-import type { Interest } from "@/lib/types";
+import { MAX_DAYS, type Interest } from "@/lib/types";
 
 interface Opt<T> {
   value: T;
@@ -113,6 +113,7 @@ export default function AiPlanner() {
     gettingAround: "mix",
     beyond: "jersey",
     date: "2026-10-03",
+    days: 1,
     dayStart: hm(9),
     dayEnd: hm(21, 30),
     homeTimeZone: undefined,
@@ -136,6 +137,7 @@ export default function AiPlanner() {
 
   const set = (patch: Partial<QuizAnswers>) => setAnswers((a) => ({ ...a, ...patch }));
   const last = step === STEPS.length - 1;
+  const days = answers.days ?? 1;
 
   async function submit() {
     setStatus("loading");
@@ -159,24 +161,27 @@ export default function AiPlanner() {
         <div className="loading-orb">
           <Sparkles size={34} color="#fff" />
         </div>
-        <h1 className="display">Building your day</h1>
+        <h1 className="display">Building your {days > 1 ? "trip" : "day"}</h1>
         <p className="muted">{LOADING_LINES[line]}…</p>
       </main>
     );
   }
 
   if (status === "done" && result) {
-    const { recommendation: rec, trip } = result;
-    const scheduled = new Set(trip.schedule.map((s) => s.stop.id));
+    const { recommendation: rec, plan } = result;
+    const multi = plan.days.length > 1;
+    const dayOf = new Map(plan.days.flatMap((d, i) => d.schedule.slice(1, -1).map((s) => [s.stop.id, i] as const)));
+    const stopCount = plan.days.reduce((n, d) => n + d.schedule.length - 2, 0);
     return (
       <main className="quiz">
         <div className="row">
           <span className={`tag ${rec.source === "claude" ? "solid" : ""}`}>
             <Sparkles size={12} /> {rec.source === "claude" ? "Curated by Claude" : "NYSee recommender"}
           </span>
-          <span className="tag">{trip.schedule.length - 2} stops</span>
-          <span className="tag">{formatDuration(trip.totals.travelMin)} travel</span>
-          <span className="tag red">${trip.cost.totalUsd.toFixed(2)} fares</span>
+          {multi && <span className="tag">{plan.days.length} days</span>}
+          <span className="tag">{stopCount} stops</span>
+          <span className="tag">{formatDuration(plan.totals.travelMin)} travel</span>
+          <span className="tag red">${plan.cost.totalUsd.toFixed(2)} fares</span>
         </div>
         <h1 className="display">{rec.title}</h1>
         <p className="muted" style={{ fontSize: 17, marginTop: 0 }}>
@@ -198,9 +203,10 @@ export default function AiPlanner() {
                   <div className="row" style={{ gap: 8 }}>
                     <b style={{ fontSize: 16 }}>{place.name}</b>
                     {p.priority === "must" && <span className="tag red">Must-see</span>}
+                    {multi && dayOf.has(p.placeId) && <span className="tag">Day {dayOf.get(p.placeId)! + 1}</span>}
                   </div>
                   <div className="muted small">{p.reason}</div>
-                  {!scheduled.has(p.placeId) && <div className="tiny" style={{ color: "var(--amber)", marginTop: 4 }}>Didn&apos;t fit today&apos;s schedule</div>}
+                  {!dayOf.has(p.placeId) && <div className="tiny" style={{ color: "var(--amber)", marginTop: 4 }}>Didn&apos;t fit the schedule</div>}
                 </div>
                 <span className="row muted tiny" style={{ gap: 6 }}>
                   <Icon size={14} /> {formatDuration(p.durationMin)}
@@ -224,7 +230,7 @@ export default function AiPlanner() {
             <RotateCcw size={16} /> Start over
           </button>
           <button className="btn primary lg" onClick={() => router.push("/trip")}>
-            Open my day on the map <ArrowRight size={18} />
+            Open my {multi ? "trip" : "day"} on the map <ArrowRight size={18} />
           </button>
         </div>
       </main>
@@ -331,7 +337,7 @@ export default function AiPlanner() {
           <div className="stack" style={{ marginTop: 20 }}>
             <div className="two">
               <label className="field">
-                Date
+                {days > 1 ? "First day" : "Date"}
                 <input type="date" value={answers.date} onChange={(e) => set({ date: e.target.value })} />
               </label>
               <label className="field">
@@ -345,9 +351,23 @@ export default function AiPlanner() {
                 </select>
               </label>
             </div>
+            <div className="row">
+              <span className="muted small" style={{ fontWeight: 700 }}>
+                How many days?
+              </span>
+              <span className="stepper">
+                <button className="btn icon ghost" aria-label="Fewer days" onClick={() => set({ days: Math.max(1, days - 1) })}>
+                  <Minus size={16} />
+                </button>
+                <b>{days}</b>
+                <button className="btn icon ghost" aria-label="More days" onClick={() => set({ days: Math.min(MAX_DAYS, days + 1) })}>
+                  <Plus size={16} />
+                </button>
+              </span>
+            </div>
             <div className="two">
               <label className="field">
-                Start
+                {days > 1 ? "Start each day" : "Start"}
                 <input type="time" value={toClockInput(answers.dayStart)} onChange={(e) => set({ dayStart: parseClock(e.target.value) })} />
               </label>
               <label className="field">
@@ -374,7 +394,7 @@ export default function AiPlanner() {
         </button>
         {last ? (
           <button className="btn primary lg" onClick={submit} disabled={answers.dayEnd <= answers.dayStart}>
-            <Sparkles size={18} /> Build my day
+            <Sparkles size={18} /> Build my {days > 1 ? "trip" : "day"}
           </button>
         ) : (
           <button className="btn primary lg" onClick={() => setStep((s) => s + 1)} disabled={step === 1 && answers.interests.length === 0}>

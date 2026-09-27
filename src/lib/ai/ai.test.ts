@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLACES_BY_ID } from "../fixtures/places";
 import { hm, windowsOn } from "../time";
-import { areaOf, offlineRecommend } from "./offline";
+import { areaOf, offlineRecommend, openDuringTrip } from "./offline";
 import { aiPlan } from "./plan";
 import type { QuizAnswers } from "./types";
 
@@ -37,6 +37,15 @@ describe("offline recommender", () => {
     expect(packed).toBeGreaterThan(relaxed);
   });
 
+  it("scales picks and meals with trip length", () => {
+    const one = offlineRecommend(base);
+    const three = offlineRecommend({ ...base, days: 3 });
+    expect(three.picks.length).toBeGreaterThan(2 * one.picks.length);
+    expect(three.picks.filter((p) => p.window)).toHaveLength(3);
+    expect(new Set(three.picks.map((p) => p.placeId)).size).toBe(three.picks.length);
+    for (const p of three.picks) expect(openDuringTrip(PLACES_BY_ID[p.placeId], { ...base, days: 3 })).toBe(true);
+  });
+
   it("stays in Manhattan when asked", () => {
     const rec = offlineRecommend({ ...base, beyond: "manhattan" });
     expect(rec.picks.every((p) => areaOf(PLACES_BY_ID[p.placeId]) === "manhattan")).toBe(true);
@@ -47,13 +56,19 @@ describe("aiPlan without an API key", () => {
   it("falls back offline and returns a routed trip", async () => {
     const r = await aiPlan(base, { BIKE_PROVIDER: "mock" });
     expect(r.recommendation.source).toBe("offline");
-    expect(r.trip.schedule.length).toBeGreaterThan(3);
-    expect(r.trip.legs.some((l) => l.mode === "path")).toBe(true);
+    expect(r.plan.days[0].schedule.length).toBeGreaterThan(3);
+    expect(r.plan.days[0].legs.some((l) => l.mode === "path")).toBe(true);
+  });
+
+  it("plans one day per requested day", async () => {
+    const r = await aiPlan({ ...base, days: 3 }, { BIKE_PROVIDER: "mock" });
+    expect(r.plan.days.map((d) => d.request.date)).toEqual(["2026-10-03", "2026-10-04", "2026-10-05"]);
+    for (const d of r.plan.days) expect(d.schedule.length).toBeGreaterThan(2);
   });
 
   it('swaps long transit legs for Uber when "comfort first"', async () => {
     const r = await aiPlan({ ...base, gettingAround: "comfort" }, { BIKE_PROVIDER: "mock" });
-    expect(r.trip.legs.some((l) => l.mode === "uber")).toBe(true);
-    expect(r.request.fixedOrder).toBeDefined();
+    expect(r.plan.days[0].legs.some((l) => l.mode === "uber")).toBe(true);
+    expect(r.request.fixedDays).toBeDefined();
   });
 });

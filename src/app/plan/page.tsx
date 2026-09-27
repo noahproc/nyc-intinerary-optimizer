@@ -7,11 +7,12 @@ import { useEffect, useState } from "react";
 import { INTEREST_ICON } from "@/components/icons";
 import { useTrip } from "@/components/TripProvider";
 import { HOTEL, PLACES } from "@/lib/fixtures/places";
-import { formatClock, parseClock, toClockInput } from "@/lib/time";
-import type { Interest, Place, Stop, TripRequest } from "@/lib/types";
+import { addDays, formatClock, parseClock, toClockInput, weekday } from "@/lib/time";
+import { MAX_DAYS, type Interest, type Place, type Stop, type TripRequest } from "@/lib/types";
 
 const INTERESTS: Interest[] = ["food", "art", "views", "history", "parks", "shopping", "kids"];
 const ENDPOINTS = [HOTEL, ...PLACES];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TIMEZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "Europe/Paris", "Europe/Berlin", "Asia/Kolkata", "Asia/Tokyo", "Australia/Sydney"];
 
 export default function PlanPage() {
@@ -44,11 +45,12 @@ export default function PlanPage() {
     set({ stops: [...r.stops, { id: place.id, place, durationMin: place.suggestedDurationMin, priority: "must" }] });
   };
   const endpoint = (id: string) => ENDPOINTS.find((p) => p.id === id) ?? HOTEL;
+  const days = r.days ?? 1;
   const suggestions = results.filter((p) => !r.stops.some((s) => s.place.id === p.id)).slice(0, query ? 8 : 6);
 
   async function go() {
-    const trip = await t.plan({ ...r, fixedOrder: undefined });
-    if (trip) router.push("/trip");
+    const plan = await t.planTrip({ ...r, fixedOrder: undefined, fixedDays: undefined });
+    if (plan) router.push("/trip");
   }
 
   return (
@@ -57,10 +59,10 @@ export default function PlanPage() {
         <div className="grow">
           <div className="eyebrow">Trip builder</div>
           <h1 className="display" style={{ fontSize: "clamp(44px, 7vw, 72px)", margin: "8px 0 0" }}>
-            Build your day
+            Build your trip
           </h1>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            Add the places you want to see. NYSee orders them around opening hours and routes every leg.
+            Add the places you want to see. NYSee splits them across your days, orders them around opening hours and routes every leg.
           </p>
         </div>
         <Link href="/ai" className="btn">
@@ -73,17 +75,27 @@ export default function PlanPage() {
           <div className="eyebrow">The basics</div>
           <div className="two">
             <label className="field">
-              Date
+              {days > 1 ? "First day" : "Date"}
               <input type="date" value={r.date} onChange={(e) => set({ date: e.target.value })} />
             </label>
             <label className="field">
-              Travelers
-              <input type="number" min={1} max={12} value={r.travelers ?? 1} onChange={(e) => set({ travelers: Math.max(1, Number(e.target.value)) })} />
+              Days
+              <input
+                type="number"
+                min={1}
+                max={MAX_DAYS}
+                value={days}
+                onChange={(e) => set({ days: Math.min(MAX_DAYS, Math.max(1, Math.floor(Number(e.target.value) || 1))) })}
+              />
             </label>
           </div>
+          <label className="field">
+            Travelers
+            <input type="number" min={1} max={12} value={r.travelers ?? 1} onChange={(e) => set({ travelers: Math.max(1, Number(e.target.value)) })} />
+          </label>
           <div className="two">
             <label className="field">
-              Start
+              {days > 1 ? "Start each day" : "Start"}
               <input type="time" value={toClockInput(r.dayStart)} onChange={(e) => set({ dayStart: parseClock(e.target.value) })} />
             </label>
             <label className="field">
@@ -153,6 +165,20 @@ export default function PlanPage() {
                   <div style={{ minWidth: 0 }}>
                     <b>{s.place.name}</b>
                     <div className="wish-controls">
+                      {days > 1 && (
+                        <select
+                          aria-label="Day"
+                          value={s.day !== undefined && s.day < days ? s.day : ""}
+                          onChange={(e) => setStop(s.id, { day: e.target.value === "" ? undefined : Number(e.target.value) })}
+                        >
+                          <option value="">Any day</option>
+                          {Array.from({ length: days }, (_, d) => (
+                            <option key={d} value={d}>
+                              Day {d + 1} · {WEEKDAYS[weekday(addDays(r.date, d))]}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       <select aria-label="Priority" value={s.priority} onChange={(e) => setStop(s.id, { priority: e.target.value as Stop["priority"] })}>
                         <option value="must">Must-see</option>
                         <option value="nice">Nice to have</option>
@@ -215,7 +241,7 @@ export default function PlanPage() {
           )}
           <button className="btn primary lg" onClick={go} disabled={t.loading || r.stops.length === 0}>
             {t.loading ? <Loader2 size={18} className="spin" /> : null}
-            {t.loading ? "Planning…" : "Plan my day"} {!t.loading && <ArrowRight size={18} />}
+            {t.loading ? "Planning…" : days > 1 ? `Plan my ${days} days` : "Plan my day"} {!t.loading && <ArrowRight size={18} />}
           </button>
         </section>
       </div>

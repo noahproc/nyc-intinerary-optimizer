@@ -1,6 +1,7 @@
 // Core data model. All clock times are "minutes after local midnight in
-// America/New_York" on the trip date (a trip is a single day), which keeps the
-// optimizer free of timezone math. Convert at the edges with lib/time.ts.
+// America/New_York" on the day in question (a multi-day trip is planned as one
+// `Trip` per day), which keeps the optimizer free of timezone math. Convert at
+// the edges with lib/time.ts.
 
 export type Minutes = number;
 
@@ -54,6 +55,8 @@ export interface Stop {
   event?: { start: Minutes };
   /** User preference, e.g. dinner between 5 and 8 PM. Intersected with opening hours. */
   window?: TimeWindow;
+  /** Pin to a trip day (0 = first day). Omitted = let the planner choose. */
+  day?: number;
 }
 
 /** What the user can pick for a leg. "transit" = best public transit option. */
@@ -145,8 +148,10 @@ export interface UnscheduledStop {
 }
 
 export interface TripRequest {
-  /** YYYY-MM-DD in America/New_York. */
+  /** YYYY-MM-DD in America/New_York; the first day of the trip. */
   date: string;
+  /** Number of days, starting at `date`. Omitted = 1. Every day shares start/end and hours. */
+  days?: number;
   start: Place;
   end: Place;
   dayStart: Minutes;
@@ -161,6 +166,12 @@ export interface TripRequest {
   overrides?: Record<string, ModeChoice>;
   /** If set, skip ordering and schedule stops in exactly this order. */
   fixedOrder?: string[];
+  /**
+   * Multi-day counterpart of `fixedOrder`: stop ids per day, in order. Keeps the
+   * day assignment and order stable when re-planning after a small edit; stops
+   * not listed are assigned and slotted in by the planner.
+   */
+  fixedDays?: string[][];
   maxDetourMin?: Minutes;
 }
 
@@ -191,6 +202,20 @@ export interface Trip {
   providers: { routing: string; places: string; bikes: string };
   warnings: string[];
 }
+
+/** A whole trip: one planned `Trip` per day plus trip-wide totals. */
+export interface TripPlan {
+  request: TripRequest;
+  days: Trip[];
+  /** All days combined, with the OMNY weekly fare cap applied across days. */
+  cost: CostSummary;
+  totals: Trip["totals"];
+  /** Trip-wide warnings (e.g. a provider fell back to offline data). Per-day ones are on each day. */
+  warnings: string[];
+}
+
+/** Longest trip the planner accepts. */
+export const MAX_DAYS = 14;
 
 export const START_ID = "__start";
 export const END_ID = "__end";

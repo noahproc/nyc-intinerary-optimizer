@@ -1,6 +1,6 @@
 import { HOTEL, PLACES } from "../fixtures/places";
 import { haversineKm, regionOf } from "../geo";
-import { hm, windowsOn } from "../time";
+import { addDays, hm, windowsOn } from "../time";
 import type { Interest, Place } from "../types";
 import type { AiPick, AiRecommendation, Beyond, QuizAnswers } from "./types";
 
@@ -40,11 +40,17 @@ const REASONS = [
   (w: string) => `Another hit for ${w}, close to your other stops.`,
 ];
 
+/** Open on at least one day of the trip; the planner puts it on a day it's open. */
+export function openDuringTrip(p: Place, a: Pick<QuizAnswers, "date" | "days">): boolean {
+  return Array.from({ length: a.days ?? 1 }, (_, d) => addDays(a.date, d)).some((date) => windowsOn(p, date).length > 0);
+}
+
 const isMeal = (p: Place) => p.categories.includes("food") && !!p.hours && p.suggestedDurationMin <= 90;
 
 export function offlineRecommend(a: QuizAnswers): AiRecommendation {
   const areas = allowedAreas(a.beyond);
-  const open = PLACES.filter((p) => areas.has(areaOf(p)) && windowsOn(p, a.date).length > 0);
+  const days = a.days ?? 1;
+  const open = PLACES.filter((p) => areas.has(areaOf(p)) && openDuringTrip(p, a));
   const wantKids = a.party === "family";
 
   const score = (p: Place) => {
@@ -63,18 +69,19 @@ export function offlineRecommend(a: QuizAnswers): AiRecommendation {
   const ranked = open.filter((p) => !isMeal(p)).sort((x, y) => score(y) - score(x));
   // Two picks a few hundred meters apart are usually the same outing (ferry + Statue).
   const overlaps = (p: Place) => chosen.some((c) => haversineKm(c.location, p.location) < 0.45);
-  const count = STOPS_BY_PACE[a.pace];
+  // Per day, less the meal added below.
+  const count = (STOPS_BY_PACE[a.pace] - 1) * days;
   // Make sure the trip actually goes where they said it would.
   if (a.beyond !== "manhattan") {
     const out = ranked.find((p) => areaOf(p) !== "manhattan");
     if (out) chosen.push(out);
   }
-  // One outing across the river is plenty; the rest of the day stays central.
+  // One outing across the river a day is plenty; the rest stays central.
   const outside = () => chosen.filter((c) => areaOf(c) !== "manhattan").length;
   for (const p of ranked) {
-    if (chosen.length >= count - 1) break;
+    if (chosen.length >= count) break;
     if (chosen.includes(p) || overlaps(p)) continue;
-    if (areaOf(p) !== "manhattan" && outside() >= 2) continue;
+    if (areaOf(p) !== "manhattan" && outside() >= days + 1) continue;
     chosen.push(p);
   }
 
@@ -85,20 +92,21 @@ export function offlineRecommend(a: QuizAnswers): AiRecommendation {
       : "A classic first-timer stop that fits the day.";
     return {
       placeId: p.id,
-      priority: i < 3 ? "must" : "nice",
+      priority: i < 3 * days ? "must" : "nice",
       durationMin: a.pace === "packed" ? Math.round(p.suggestedDurationMin * 0.8) : p.suggestedDurationMin,
       reason: p.blurb ? `${why} ${p.blurb}` : why,
     };
   });
 
-  // Always plan a proper meal, near the far end of the day if they left Manhattan.
-  const food = open
+  // Always plan a proper meal each day, near the far end of the day if they left Manhattan.
+  const meals = open
     .filter(isMeal)
     .sort((x, y) => {
       const bonus = (p: Place) => (a.beyond !== "manhattan" && areaOf(p) !== "manhattan" ? 2 : 0);
       return score(y) + bonus(y) - (score(x) + bonus(x));
-    })[0];
-  if (food) {
+    })
+    .slice(0, days);
+  for (const food of meals) {
     picks.push({
       placeId: food.id,
       priority: "nice",
@@ -113,8 +121,8 @@ export function offlineRecommend(a: QuizAnswers): AiRecommendation {
   const top = [...counts].sort((x, y) => y[1] - x[1])[0];
   const lead = top ? INTEREST_WORDS[top[0]] : "the classics";
   return {
-    title: `${partyWord} day of ${lead}`,
-    summary: `${picks.length} stops tuned to a ${a.pace} pace${a.beyond !== "manhattan" ? ", with a hop outside Manhattan" : ""}. Your route is optimized around opening hours and the fastest way between each stop.`,
+    title: days > 1 ? `${partyWord} ${days} days of ${lead}` : `${partyWord} day of ${lead}`,
+    summary: `${picks.length} stops${days > 1 ? ` over ${days} days` : ""} tuned to a ${a.pace} pace${a.beyond !== "manhattan" ? ", with a hop outside Manhattan" : ""}. Your route is optimized around opening hours and the fastest way between each stop.`,
     picks,
     tips: [
       "Tap the same contactless card or phone for subway, bus and PATH; each traveler needs their own.",

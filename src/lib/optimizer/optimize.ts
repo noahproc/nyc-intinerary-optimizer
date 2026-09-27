@@ -24,7 +24,7 @@ const feasible = (p: Problem, route: number[]) => simulate(p, route).late === 0;
 const cost = (p: Problem, route: number[]) => objective(simulate(p, route));
 
 /** Best feasible position for `node` in `route`, or null. */
-function bestInsertion(p: Problem, route: number[], node: number): { pos: number; added: number } | null {
+export function bestInsertion(p: Problem, route: number[], node: number): { pos: number; added: number } | null {
   const base = cost(p, route);
   let best: { pos: number; added: number } | null = null;
   for (let pos = 0; pos <= route.length; pos++) {

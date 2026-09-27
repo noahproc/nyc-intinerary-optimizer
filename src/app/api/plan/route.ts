@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { planTrip } from "@/lib/planner";
-import type { TripRequest } from "@/lib/types";
+import { planDays } from "@/lib/multiday";
+import { MAX_DAYS, type TripRequest } from "@/lib/types";
 
 export async function POST(request: Request) {
   let body: TripRequest;
@@ -15,8 +15,11 @@ export async function POST(request: Request) {
   if (body.dayEnd <= body.dayStart) {
     return NextResponse.json({ error: "End time must be after start time" }, { status: 400 });
   }
+  if (body.days != null && !(Number.isInteger(body.days) && body.days >= 1 && body.days <= MAX_DAYS)) {
+    return NextResponse.json({ error: `days must be a whole number from 1 to ${MAX_DAYS}` }, { status: 400 });
+  }
   try {
-    return NextResponse.json(await planTrip(body));
+    return NextResponse.json(await planDays(body));
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

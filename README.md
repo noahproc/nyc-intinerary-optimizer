@@ -63,7 +63,8 @@ Tokens live at the top of `src/app/globals.css`.
 | 2 | **Multimodal legs**: every leg has segments (walk → subway → PATH → walk…), duration, and cost. Change any leg's mode and the schedule recalculates, keeping your order | `src/lib/providers/mock/router.ts`, `src/lib/planner.ts` |
 | 3 | **Along-the-way suggestions**: places within a ≤10 min detour that match your interests and still fit the schedule; one-click "Add" inserts them as a surprise stop | `planner.ts` → `addSuggestions` |
 | 4 | **Trip cost bundle**: fares grouped by how you pay (OMNY tap, PATH via TAPP, LIRR/MNR via TrainTime, Citi Bike, Uber, car), per-rider vs per-vehicle, with deep links (Uber pickup/drop-off prefilled). No ticket purchasing | `src/lib/cost.ts`, `/fares` |
-| 5 | **Time awareness**: everything in America/New_York (DST-safe), plus a jet-lag note from the visitor's home timezone | `src/lib/time.ts` |
+| 5 | **Multi-day trips**: set how many days; the wishlist is split across days by opening hours (closed-Monday museums land elsewhere), geography (nearby stops share a day), and how full each day is. Pin any stop to a day or move it from the trip page; the OMNY 7-day fare cap is applied across the whole trip | `src/lib/multiday.ts`, `combineCosts` in `src/lib/cost.ts` |
+| 6 | **Time awareness**: everything in America/New_York (DST-safe), plus a jet-lag note from the visitor's home timezone | `src/lib/time.ts` |
 | + | **AI planner**: quiz → Claude recommendations → routed trip | `src/lib/ai/`, `/ai` |
 
 ## Architecture
@@ -71,7 +72,7 @@ Tokens live at the top of `src/app/globals.css`.
 ```
  Browser (Next.js pages: / /ai /plan /trip /fares, shared TripProvider state)
    /ai quiz ── POST /api/ai (QuizAnswers → Claude picks → planTrip) ───────┐
-   /plan, /trip ── POST /api/plan  (TripRequest → Trip) ──────────────────┤
+   /plan, /trip ── POST /api/plan  (TripRequest → TripPlan, one Trip/day) ┤
                                                                              │
  Server: planTrip()  src/lib/planner.ts                                       │
    1. estimate matrix ── mock/router.estimateMinutes (fast, local, per-mode) │
@@ -127,7 +128,7 @@ Unscheduled stops get a reason: closed that day, window outside your hours, or "
 | **Google Places API (New)**: Text Search, Nearby Search | Resolving arbitrary places, live opening hours, suggestion candidates | same key | Asking for `regularOpeningHours` puts requests in the Pro/Enterprise tiers (~5k/1k free per month). The field mask in `providers/google/places.ts` is deliberately small. |
 | **Anthropic API** (Claude Opus 5) | AI trip planner recommendations | `ANTHROPIC_API_KEY` | Pay-as-you-go ($5 / $25 per million input/output tokens). One quiz ≈ 4k input + ~1k output tokens, about 5 cents; the cached catalog prompt makes repeats cheaper. Without a key the built-in recommender is used. |
 | **Citi Bike GBFS** | Live dock/bike counts on Citi Bike legs | none | Free public feed (`gbfs.citibikenyc.com`) |
-| **Map tiles**: CARTO Voyager / OpenStreetMap via Leaflet | Base map | none | Free for low-volume/non-commercial use with attribution. Swap to Mapbox or Google tiles if needed. |
+| **Map tiles**: CARTO dark / OpenStreetMap via Leaflet | Base map | `NEXT_PUBLIC_CARTO_API_KEY` | Free CARTO Basemaps key; without it raster tiles show an "API key required" watermark. Free up to 5M tile requests/month non-commercial (1M commercial). Restrict the key to your site's domains in the CARTO dashboard; it ships to the browser. |
 | Uber | Deep links only (`m.uber.com/ul/?action=setPickup…`) | none | The Uber price estimate API needs partner approval, so the app uses its own fare model. |
 
 For the Google key, enable **Routes API** and **Places API (New)** in one Cloud project, restrict the key to
@@ -166,7 +167,8 @@ For the scripted walkthrough, use *open the sample family day* on the homepage. 
 - **The offline transit model** is geographic, not schedule-based: it uses average speeds, a real PATH station and
   line list, and a few key LIRR/Metro-North stations. It's good for ordering and demos; Google/OTP provide the real times.
 - **Fixture opening hours** are representative, not live. Google Places supplies real hours when enabled.
-- A trip is a single day. Multi-day trips would call `planTrip` per day, splitting the wishlist first.
+- Every day of a multi-day trip shares the same hotel and start/end times. Day assignment uses the offline
+  travel estimates; each day is then routed for real. Up to 14 days.
 - The Google adapters follow the documented Routes/Places (New) request shapes but **haven't been run against
   live keys** in this repo yet, because the build environment had no network access to Google. Expect small
   field-mapping fixes on the first real run.

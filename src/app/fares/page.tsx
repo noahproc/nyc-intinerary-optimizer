@@ -11,10 +11,10 @@ import type { PaymentChannel } from "@/lib/types";
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
 export default function FaresPage() {
-  const { trip, hydrated } = useTrip();
+  const { plan, hydrated } = useTrip();
   if (!hydrated) return null;
 
-  if (!trip) {
+  if (!plan) {
     return (
       <main className="empty">
         <Wallet size={40} className="red" />
@@ -32,31 +32,39 @@ export default function FaresPage() {
     );
   }
 
-  const { cost } = trip;
-  const travelers = trip.request.travelers ?? 1;
+  const { cost } = plan;
+  const travelers = plan.request.travelers ?? 1;
+  const multi = plan.days.length > 1;
   const tapLines = cost.lines.filter((l) => l.payment === "omny" || l.payment === "tapp");
   const tapTotal = tapLines.reduce((t, l) => t + l.totalUsd, 0);
-  const names = Object.fromEntries(trip.schedule.map((s) => [s.stop.id, s.stop.place.name]));
-  const departs = Object.fromEntries(trip.schedule.map((s) => [s.stop.id, s.depart]));
-
-  // Every paid leg in time order: "your taps today".
-  const taps = trip.legs.flatMap((leg) => {
-    const channels = [...new Set(leg.segments.map((s) => s.payment).filter((p) => p !== "free"))] as PaymentChannel[];
-    return channels.map((payment) => ({
-      key: `${leg.fromStopId}>${leg.toStopId}>${payment}`,
-      at: departs[leg.fromStopId],
-      label: `${names[leg.fromStopId]} → ${names[leg.toStopId]}`,
-      payment,
-      cost: cost.lines.find((l) => l.payment === payment)?.legs.find((x) => x.fromStopId === leg.fromStopId && x.toStopId === leg.toStopId)?.costUsd ?? 0,
-    }));
+  // Every paid leg in time order, day by day: "your taps".
+  const tapDays = plan.days.map((trip) => {
+    const names = Object.fromEntries(trip.schedule.map((s) => [s.stop.id, s.stop.place.name]));
+    const departs = Object.fromEntries(trip.schedule.map((s) => [s.stop.id, s.depart]));
+    return {
+      date: trip.request.date,
+      taps: trip.legs.flatMap((leg) => {
+        const channels = [...new Set(leg.segments.map((s) => s.payment).filter((p) => p !== "free"))] as PaymentChannel[];
+        return channels.map((payment) => ({
+          key: `${leg.fromStopId}>${leg.toStopId}>${payment}`,
+          at: departs[leg.fromStopId],
+          label: `${names[leg.fromStopId]} → ${names[leg.toStopId]}`,
+          payment,
+          // Look up the trip-wide line so the weekly fare cap shows on the rides it makes free.
+          cost:
+            cost.lines.find((l) => l.payment === payment)?.legs.find((x) => x.fromStopId === leg.fromStopId && x.toStopId === leg.toStopId)?.costUsd ?? 0,
+        }));
+      }),
+    };
   });
+  const tapCount = tapDays.reduce((n, d) => n + d.taps.length, 0);
 
   return (
     <main className="page stack" style={{ gap: 28 }}>
       <div>
         <div className="eyebrow">Fare bundle</div>
         <h1 className="display" style={{ fontSize: "clamp(44px, 7vw, 76px)", margin: "8px 0 0" }}>
-          One day. Every fare.
+          {multi ? `${plan.days.length} days.` : "One day."} Every fare.
         </h1>
       </div>
 
@@ -67,7 +75,7 @@ export default function FaresPage() {
           </span>
           <span className="big">{usd(cost.totalUsd)}</span>
           <span style={{ color: "#ffd0da" }}>
-            for {travelers} traveler{travelers > 1 ? "s" : ""} · {taps.length} payments
+            for {travelers} traveler{travelers > 1 ? "s" : ""} · {tapCount} payments
           </span>
         </div>
         <div className="card stack">
@@ -138,21 +146,28 @@ export default function FaresPage() {
         <h2 className="display" style={{ fontSize: 34, margin: 0 }}>
           Your payments, in order
         </h2>
-        <div className="taps">
-          {taps.map((tap) => {
-            const meta = PAYMENT_META[tap.payment];
-            return (
-              <div className="tap" key={tap.key}>
-                <b style={{ fontVariantNumeric: "tabular-nums" }}>{formatClock(tap.at)}</b>
-                <span>{tap.label}</span>
-                <span className="pay-pill" style={{ background: meta.color, color: "#000" }}>
-                  {meta.short}
-                </span>
-                <b>{usd(tap.cost)}</b>
+        {tapDays.map(({ date, taps }, d) =>
+          taps.length === 0 && multi ? null : (
+            <div key={date} className="stack" style={{ gap: 8 }}>
+              {multi && <div className="eyebrow">Day {d + 1} · {date}</div>}
+              <div className="taps">
+                {taps.map((tap) => {
+                  const meta = PAYMENT_META[tap.payment];
+                  return (
+                    <div className="tap" key={tap.key}>
+                      <b style={{ fontVariantNumeric: "tabular-nums" }}>{formatClock(tap.at)}</b>
+                      <span>{tap.label}</span>
+                      <span className="pay-pill" style={{ background: meta.color, color: "#000" }}>
+                        {meta.short}
+                      </span>
+                      <b>{usd(tap.cost)}</b>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          ),
+        )}
       </section>
 
       <div className="stack small muted">

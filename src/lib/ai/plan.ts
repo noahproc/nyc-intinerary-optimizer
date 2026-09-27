@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { HOTEL, PLACES_BY_ID } from "../fixtures/places";
-import { planTrip } from "../planner";
-import { legKey, type Trip, type TripRequest } from "../types";
+import { planDays } from "../multiday";
+import { legKey, type TripPlan, type TripRequest } from "../types";
 import { claudeRecommend } from "./claude";
 import { offlineRecommend } from "./offline";
 import type { AiRecommendation, QuizAnswers } from "./types";
@@ -9,7 +9,7 @@ import type { AiRecommendation, QuizAnswers } from "./types";
 export interface AiPlanResult {
   recommendation: AiRecommendation;
   request: TripRequest;
-  trip: Trip;
+  plan: TripPlan;
 }
 
 const hasCredentials = (env: Record<string, string | undefined>) =>
@@ -36,6 +36,7 @@ async function recommend(a: QuizAnswers, env: Record<string, string | undefined>
 export function requestFrom(a: QuizAnswers, rec: AiRecommendation): TripRequest {
   return {
     date: a.date,
+    days: a.days,
     start: HOTEL,
     end: HOTEL,
     dayStart: a.dayStart,
@@ -59,21 +60,20 @@ export function requestFrom(a: QuizAnswers, rec: AiRecommendation): TripRequest 
 export async function aiPlan(a: QuizAnswers, env: Record<string, string | undefined> = process.env): Promise<AiPlanResult> {
   const recommendation = await recommend(a, env);
   let request = requestFrom(a, recommendation);
-  let trip = await planTrip(request);
+  let plan = await planDays(request);
 
   if (a.gettingAround === "comfort") {
-    const slow = trip.legs.filter(
+    const slow = plan.days.flatMap((d) => d.legs).filter(
       (l) => l.durationMin > 30 && l.availableChoices.includes("uber") && ["subway", "bus", "path"].includes(l.mode),
     );
     if (slow.length) {
       request = {
         ...request,
         overrides: Object.fromEntries(slow.map((l) => [legKey(l.fromStopId, l.toStopId), "uber" as const])),
-        fixedOrder: trip.schedule.slice(1, -1).map((s) => s.stop.id),
+        fixedDays: plan.days.map((d) => d.schedule.slice(1, -1).map((s) => s.stop.id)),
       };
-      trip = await planTrip(request);
+      plan = await planDays(request);
     }
   }
-  return { recommendation, request, trip };
+  return { recommendation, request, plan };
 }
-

@@ -39,6 +39,12 @@ export function weekday(date: string): number {
   return new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
 }
 
+/** "2026-10-03" + 2 -> "2026-10-05". */
+export function addDays(date: string, n: number): string {
+  const [y, mo, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, mo - 1, d + n)).toISOString().slice(0, 10);
+}
+
 /** Offset of `timeZone` from UTC in minutes at a given instant. */
 export function tzOffsetMinutes(timeZone: string, at: Date): number {
   const parts = new Intl.DateTimeFormat("en-US", {

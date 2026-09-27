@@ -13,8 +13,10 @@ export interface QuizAnswers {
   pace: Pace;
   gettingAround: GettingAround;
   beyond: Beyond;
-  /** YYYY-MM-DD */
+  /** YYYY-MM-DD; the first day. */
   date: string;
+  /** Trip length in days. Omitted = 1. */
+  days?: number;
   dayStart: Minutes;
   dayEnd: Minutes;
   homeTimeZone?: string;

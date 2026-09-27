@@ -16,6 +16,10 @@ interface Props {
   onOverride: (leg: Leg, choice: ModeChoice) => void;
   onAddSuggestion: (leg: Leg, place: Place) => void;
   onHoverLeg: (i: number | null) => void;
+  /** One label per trip day; omitted for single-day trips (no "move to day" menu). */
+  dayLabels?: string[];
+  day?: number;
+  onMoveStop?: (stopId: string, toDay: number) => void;
 }
 
 const gmapsMode = (leg: Leg) =>
@@ -109,7 +113,7 @@ function LegCard({ trip, i, onOverride, onAddSuggestion }: { trip: Trip; i: numb
 }
 
 export default function Itinerary(props: Props) {
-  const { trip, surprises, selectedStop, onSelectStop, onHoverLeg } = props;
+  const { trip, surprises, selectedStop, onSelectStop, onHoverLeg, dayLabels, day, onMoveStop } = props;
   let n = 0;
   return (
     <div>
@@ -140,6 +144,26 @@ export default function Itinerary(props: Props) {
                     <span className="tag">
                       <Ticket size={11} /> {formatClock(s.stop.event.start)}
                     </span>
+                  )}
+                  {dayLabels && onMoveStop && !endpoint && (
+                    <select
+                      className="move-day"
+                      aria-label={`Move ${s.stop.place.name} to another day`}
+                      value=""
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => onMoveStop(s.stop.id, Number(e.target.value))}
+                    >
+                      <option value="" disabled>
+                        Move to…
+                      </option>
+                      {dayLabels.map((label, d) =>
+                        d === day ? null : (
+                          <option key={d} value={d}>
+                            {label}
+                          </option>
+                        ),
+                      )}
+                    </select>
                   )}
                 </div>
                 <div className="tl-sub" style={{ marginTop: 4 }}>

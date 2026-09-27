@@ -32,7 +32,7 @@ function primaryMode(segments: Segment[]): SegmentMode {
   return [...segments].sort((a, b) => SEGMENT_RANK.indexOf(a.mode) - SEGMENT_RANK.indexOf(b.mode))[0].mode;
 }
 
-function windowsFor(stop: Stop, date: string) {
+export function windowsFor(stop: Stop, date: string) {
   if (stop.event) return [{ start: stop.event.start, end: stop.event.start + stop.durationMin }];
   const open = windowsOn(stop.place, date);
   const pref = stop.window;

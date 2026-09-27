@@ -38,7 +38,7 @@ function HeroLines() {
 }
 
 export default function Home() {
-  const { trip, recommendation, hydrated, loadSample, loading } = useTrip();
+  const { plan, recommendation, hydrated, loadSample, loading } = useTrip();
   const router = useRouter();
 
   const openSample = async () => {
@@ -102,14 +102,18 @@ export default function Home() {
         </div>
       </section>
 
-      {hydrated && trip && (
+      {hydrated && plan && (
         <section className="section" style={{ paddingTop: 32 }}>
           <Link href="/trip" className="card row" style={{ borderColor: "var(--red-3)" }}>
             <Route className="red" size={22} />
             <div className="grow">
               <div className="eyebrow">Pick up where you left off</div>
-              <b style={{ fontSize: 18 }}>{recommendation?.title ?? "Your NYC day"}</b>
-              <span className="muted"> · {trip.schedule.length - 2} stops · {trip.request.date}</span>
+              <b style={{ fontSize: 18 }}>{recommendation?.title ?? (plan.days.length > 1 ? "Your NYC trip" : "Your NYC day")}</b>
+              <span className="muted">
+                {" "}
+                · {plan.days.reduce((n, d) => n + d.schedule.length - 2, 0)} stops · {plan.request.date}
+                {plan.days.length > 1 ? ` · ${plan.days.length} days` : ""}
+              </span>
             </div>
             <ArrowRight />
           </Link>
