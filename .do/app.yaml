@@ -1,0 +1,27 @@
+# DigitalOcean App Platform spec. Create the app from this repo, then fill in the
+# secret values in the dashboard (never commit them: this repo is public).
+name: nysee
+region: nyc
+services:
+  - name: web
+    github:
+      repo: noahproc/nyc-intinerary-optimizer
+      branch: main
+      deploy_on_push: true
+    environment_slug: node-js
+    build_command: npm run build
+    run_command: npm start
+    http_port: 8080
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    envs:
+      # Inlined into the browser bundle at build time, so it must exist during the build.
+      - key: NEXT_PUBLIC_CARTO_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: BIKE_PROVIDER
+        scope: RUN_TIME
+        value: live
